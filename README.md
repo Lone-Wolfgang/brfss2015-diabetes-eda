@@ -46,7 +46,42 @@ target: 0 = no diabetes, 1 = prediabetes, 2 = diabetes) and place it in
 
 ## Setup
 
+This project uses [`uv`](https://docs.astral.sh/uv/) to manage the Python
+environment. `uv` reads `pyproject.toml` and `uv.lock` (already in this repo)
+and installs the exact same package versions for everyone — no manual venv
+setup, no "works on my machine."
+
+**1. Install `uv`** (one-time, per machine):
+
+```bash
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# or, if you already have Python + pip:
+pip install uv
+```
+
+Full install docs: https://docs.astral.sh/uv/getting-started/installation/
+
+**2. Install project dependencies** (one-time per clone, and again anytime
+`pyproject.toml`/`uv.lock` change):
+
 ```bash
 uv sync
+```
+
+This creates a `.venv/` folder in the repo with everything from
+`pyproject.toml` installed at the locked versions.
+
+**3. Launch JupyterLab:**
+
+```bash
 uv run jupyter lab
 ```
+
+This opens JupyterLab using the project's environment automatically — no
+need to activate the venv yourself. From then on, `uv run jupyter lab` from
+the repo root is the everyday command to get back to work.
