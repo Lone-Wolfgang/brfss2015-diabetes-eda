@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+"""Discover Lab*/*.ipynb, render each to HTML, and emit a tabbed index.html."""
+
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+SITE = ROOT / "_site"
+
+
+def split_words(stem: str) -> str:
+    words = re.findall(r"[A-Z]+(?=[A-Z][a-z])|[A-Z][a-z]*|[a-z]+|\d+", stem)
+    return " ".join(words) if words else stem
+
+
+def discover_labs() -> list[dict]:
+    labs = []
+    for lab_dir in sorted(ROOT.glob("Lab*")):
+        if not lab_dir.is_dir():
+            continue
+        match = re.fullmatch(r"Lab(\d+)", lab_dir.name)
+        if not match:
+            continue
+        notebooks = sorted(lab_dir.glob("*.ipynb"), key=lambda p: p.stem)
+        if not notebooks:
+            continue
+        members = [{"stem": nb.stem, "label": split_words(nb.stem)} for nb in notebooks]
+        labs.append(
+            {
+                "dir": lab_dir.name,
+                "num": int(match.group(1)),
+                "label": split_words(lab_dir.name),
+                "members": members,
+                "notebooks": notebooks,
+            }
+        )
+    labs.sort(key=lambda lab: lab["num"])
+    return labs
+
+
+def render_notebooks(labs: list[dict]) -> None:
+    SITE.mkdir(parents=True, exist_ok=True)
+    for lab in labs:
+        out_dir = SITE / lab["dir"]
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for nb in lab["notebooks"]:
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "jupyter",
+                    "nbconvert",
+                    "--to",
+                    "html",
+                    "--template",
+                    "classic",
+                    "--output",
+                    nb.stem,
+                    "--output-dir",
+                    str(out_dir),
+                    str(nb),
+                ],
+                check=True,
+            )
+
+
+INDEX_TEMPLATE = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BRFSS 2015 Diabetes EDA</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {{
+    color-scheme: light dark;
+    --border: #d0d0d5;
+    --bg: #fff;
+    --fg: #1a1a1a;
+    --tab-bg: #f3f3f6;
+    --tab-active-bg: #fff;
+    --accent: #4f46e5;
+  }}
+  @media (prefers-color-scheme: dark) {{
+    :root {{
+      --border: #3a3a40;
+      --bg: #1e1e22;
+      --fg: #ececec;
+      --tab-bg: #2a2a30;
+      --tab-active-bg: #1e1e22;
+      --accent: #818cf8;
+    }}
+  }}
+  * {{ box-sizing: border-box; }}
+  html, body {{ height: 100%; margin: 0; }}
+  body {{
+    display: flex;
+    flex-direction: column;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+  }}
+  header {{ padding: 0.75rem 1rem 0; border-bottom: 1px solid var(--border); }}
+  h1 {{ font-size: 1.1rem; margin: 0 0 0.5rem; }}
+  .tabs {{ display: flex; gap: 2px; flex-wrap: wrap; }}
+  .tabs button {{
+    appearance: none;
+    border: 1px solid var(--border);
+    border-bottom: none;
+    background: var(--tab-bg);
+    color: var(--fg);
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    cursor: pointer;
+    border-radius: 6px 6px 0 0;
+  }}
+  .tabs button.active {{
+    background: var(--tab-active-bg);
+    font-weight: 600;
+    color: var(--accent);
+  }}
+  .subtabs {{
+    display: flex;
+    gap: 2px;
+    flex-wrap: wrap;
+    padding: 0.5rem 1rem 0;
+    background: var(--tab-active-bg);
+  }}
+  .subtabs button {{
+    appearance: none;
+    border: 1px solid var(--border);
+    background: var(--tab-bg);
+    color: var(--fg);
+    padding: 0.35rem 0.85rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    border-radius: 5px;
+  }}
+  .subtabs button.active {{
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }}
+  main {{ flex: 1; min-height: 0; }}
+  iframe {{ width: 100%; height: 100%; border: none; display: block; }}
+  .empty {{ padding: 2rem; font-size: 1rem; }}
+</style>
+</head>
+<body>
+<header>
+  <h1>BRFSS 2015 Diabetes EDA</h1>
+  <nav class="tabs" id="lab-tabs"></nav>
+  <nav class="subtabs" id="member-tabs"></nav>
+</header>
+<main id="main"></main>
+<script>
+  const LABS = {labs_json};
+
+  const labTabs = document.getElementById("lab-tabs");
+  const memberTabs = document.getElementById("member-tabs");
+  const main = document.getElementById("main");
+
+  function render(labDir, memberStem) {{
+    const lab = LABS.find(l => l.dir === labDir) || LABS[0];
+    const member = lab.members.find(m => m.stem === memberStem) || lab.members[0];
+
+    labTabs.innerHTML = "";
+    LABS.forEach(l => {{
+      const btn = document.createElement("button");
+      btn.textContent = l.label;
+      btn.className = l.dir === lab.dir ? "active" : "";
+      btn.onclick = () => {{ location.hash = `#${{l.dir}}/${{l.members[0].stem}}`; }};
+      labTabs.appendChild(btn);
+    }});
+
+    memberTabs.innerHTML = "";
+    lab.members.forEach(m => {{
+      const btn = document.createElement("button");
+      btn.textContent = m.label;
+      btn.className = m.stem === member.stem ? "active" : "";
+      btn.onclick = () => {{ location.hash = `#${{lab.dir}}/${{m.stem}}`; }};
+      memberTabs.appendChild(btn);
+    }});
+
+    main.innerHTML = "";
+    const iframe = document.createElement("iframe");
+    iframe.src = `${{lab.dir}}/${{member.stem}}.html`;
+    main.appendChild(iframe);
+  }}
+
+  function fromHash() {{
+    const [labDir, memberStem] = location.hash.replace(/^#/, "").split("/");
+    render(labDir, memberStem);
+  }}
+
+  if (LABS.length === 0) {{
+    document.querySelector("header").remove();
+    main.innerHTML = '<p class="empty">No lab submissions yet.</p>';
+  }} else {{
+    window.addEventListener("hashchange", fromHash);
+    fromHash();
+  }}
+</script>
+</body>
+</html>
+"""
+
+
+def write_index(labs: list[dict]) -> None:
+    labs_json = json.dumps(
+        [
+            {
+                "dir": lab["dir"],
+                "label": lab["label"],
+                "members": [{"stem": m["stem"], "label": m["label"]} for m in lab["members"]],
+            }
+            for lab in labs
+        ]
+    )
+    (SITE / "index.html").write_text(INDEX_TEMPLATE.format(labs_json=labs_json))
+
+
+def main() -> None:
+    labs = discover_labs()
+    render_notebooks(labs)
+    write_index(labs)
+    print(f"Built site for {len(labs)} lab(s): {[l['dir'] for l in labs]}")
+
+
+if __name__ == "__main__":
+    main()

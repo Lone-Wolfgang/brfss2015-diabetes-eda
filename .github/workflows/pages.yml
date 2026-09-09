@@ -24,15 +24,11 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install nbconvert
+      - name: Install deps
         run: pip install nbconvert jupyter_core
 
-      - name: Render notebook to HTML
-        run: |
-          mkdir -p _site
-          jupyter nbconvert --to html --template classic \
-            --output index --output-dir _site \
-            brfss2015_diabetes_eda.ipynb
+      - name: Build site
+        run: python scripts/build_pages.py
 
       - uses: actions/upload-pages-artifact@v3
         with:
