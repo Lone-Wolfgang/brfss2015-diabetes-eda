@@ -85,3 +85,18 @@ uv run jupyter lab
 This opens JupyterLab using the project's environment automatically — no
 need to activate the venv yourself. From then on, `uv run jupyter lab` from
 the repo root is the everyday command to get back to work.
+
+## Census API key (Lab1 / `WolfgangKlein.ipynb`)
+
+Section 2.1 of that notebook pulls 2015 ACS data from the Census API, which
+now requires a free key (keyless requests return a "Missing Key" page).
+
+1. Get a key: https://api.census.gov/data/key_signup.html
+2. `cp .env.example .env` and put your key in it (`.env` is gitignored).
+3. VS Code loads `.env` into the notebook kernel automatically — just restart
+   the kernel after editing it. For `uv run`, launch with
+   `uv run --env-file .env jupyter lab`.
+
+The pulled numbers are cached to `Lab1/cache/census_2015_reference.json`
+(committed), so the key is only needed the first time — and never by the
+Pages build.
