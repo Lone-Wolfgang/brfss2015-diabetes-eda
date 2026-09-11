@@ -22,3 +22,9 @@ submissions/
 
 
 artifacts/
+
+# macOS
+.DS_Store
+
+# Pages build output
+_site/

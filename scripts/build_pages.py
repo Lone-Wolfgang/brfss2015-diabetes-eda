@@ -3,6 +3,7 @@
 
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -13,7 +14,9 @@ SITE = ROOT / "_site"
 
 def split_words(stem: str) -> str:
     words = re.findall(r"[A-Z]+(?=[A-Z][a-z])|[A-Z][a-z]*|[a-z]+|\d+", stem)
-    return " ".join(words) if words else stem
+    if not words:
+        return stem
+    return " ".join(w[:1].upper() + w[1:] for w in words)
 
 
 def discover_labs() -> list[dict]:
@@ -30,6 +33,7 @@ def discover_labs() -> list[dict]:
         members = [{"stem": nb.stem, "label": split_words(nb.stem)} for nb in notebooks]
         labs.append(
             {
+                "type": "lab",
                 "dir": lab_dir.name,
                 "num": int(match.group(1)),
                 "label": split_words(lab_dir.name),
@@ -39,6 +43,27 @@ def discover_labs() -> list[dict]:
         )
     labs.sort(key=lambda lab: lab["num"])
     return labs
+
+
+def discover_static_sections() -> list[dict]:
+    """Any top-level dir with a docs/index.html is a standalone static section."""
+    sections = []
+    for docs_dir in sorted(ROOT.glob("*/docs")):
+        index = docs_dir / "index.html"
+        if not index.is_file():
+            continue
+        section_dir = docs_dir.parent
+        sections.append(
+            {
+                "type": "static",
+                "dir": section_dir.name,
+                "label": split_words(section_dir.name),
+                "members": [],
+                "source": docs_dir,
+            }
+        )
+    sections.sort(key=lambda s: s["label"])
+    return sections
 
 
 def render_notebooks(labs: list[dict]) -> None:
@@ -65,6 +90,13 @@ def render_notebooks(labs: list[dict]) -> None:
                 ],
                 check=True,
             )
+
+
+def copy_static_sections(sections: list[dict]) -> None:
+    SITE.mkdir(parents=True, exist_ok=True)
+    for section in sections:
+        out_dir = SITE / section["dir"]
+        shutil.copytree(section["source"], out_dir, dirs_exist_ok=True)
 
 
 INDEX_TEMPLATE = """<!doctype html>
@@ -162,37 +194,43 @@ INDEX_TEMPLATE = """<!doctype html>
   const memberTabs = document.getElementById("member-tabs");
   const main = document.getElementById("main");
 
-  function render(labDir, memberStem) {{
-    const lab = LABS.find(l => l.dir === labDir) || LABS[0];
-    const member = lab.members.find(m => m.stem === memberStem) || lab.members[0];
+  function tabHash(section) {{
+    return section.type === "static" ? `#${{section.dir}}` : `#${{section.dir}}/${{section.members[0].stem}}`;
+  }}
+
+  function render(sectionDir, memberStem) {{
+    const section = LABS.find(l => l.dir === sectionDir) || LABS[0];
+    const member = section.type === "lab"
+      ? (section.members.find(m => m.stem === memberStem) || section.members[0])
+      : null;
 
     labTabs.innerHTML = "";
     LABS.forEach(l => {{
       const btn = document.createElement("button");
       btn.textContent = l.label;
-      btn.className = l.dir === lab.dir ? "active" : "";
-      btn.onclick = () => {{ location.hash = `#${{l.dir}}/${{l.members[0].stem}}`; }};
+      btn.className = l.dir === section.dir ? "active" : "";
+      btn.onclick = () => {{ location.hash = tabHash(l); }};
       labTabs.appendChild(btn);
     }});
 
     memberTabs.innerHTML = "";
-    lab.members.forEach(m => {{
+    section.members.forEach(m => {{
       const btn = document.createElement("button");
       btn.textContent = m.label;
       btn.className = m.stem === member.stem ? "active" : "";
-      btn.onclick = () => {{ location.hash = `#${{lab.dir}}/${{m.stem}}`; }};
+      btn.onclick = () => {{ location.hash = `#${{section.dir}}/${{m.stem}}`; }};
       memberTabs.appendChild(btn);
     }});
 
     main.innerHTML = "";
     const iframe = document.createElement("iframe");
-    iframe.src = `${{lab.dir}}/${{member.stem}}.html`;
+    iframe.src = section.type === "static" ? `${{section.dir}}/index.html` : `${{section.dir}}/${{member.stem}}.html`;
     main.appendChild(iframe);
   }}
 
   function fromHash() {{
-    const [labDir, memberStem] = location.hash.replace(/^#/, "").split("/");
-    render(labDir, memberStem);
+    const [sectionDir, memberStem] = location.hash.replace(/^#/, "").split("/");
+    render(sectionDir, memberStem);
   }}
 
   if (LABS.length === 0) {{
@@ -208,25 +246,29 @@ INDEX_TEMPLATE = """<!doctype html>
 """
 
 
-def write_index(labs: list[dict]) -> None:
-    labs_json = json.dumps(
+def write_index(sections: list[dict]) -> None:
+    sections_json = json.dumps(
         [
             {
-                "dir": lab["dir"],
-                "label": lab["label"],
-                "members": [{"stem": m["stem"], "label": m["label"]} for m in lab["members"]],
+                "type": section["type"],
+                "dir": section["dir"],
+                "label": section["label"],
+                "members": [{"stem": m["stem"], "label": m["label"]} for m in section["members"]],
             }
-            for lab in labs
+            for section in sections
         ]
     )
-    (SITE / "index.html").write_text(INDEX_TEMPLATE.format(labs_json=labs_json))
+    (SITE / "index.html").write_text(INDEX_TEMPLATE.format(labs_json=sections_json))
 
 
 def main() -> None:
     labs = discover_labs()
+    static_sections = discover_static_sections()
     render_notebooks(labs)
-    write_index(labs)
-    print(f"Built site for {len(labs)} lab(s): {[l['dir'] for l in labs]}")
+    copy_static_sections(static_sections)
+    sections = labs + static_sections
+    write_index(sections)
+    print(f"Built site for {len(sections)} section(s): {[s['dir'] for s in sections]}")
 
 
 if __name__ == "__main__":
