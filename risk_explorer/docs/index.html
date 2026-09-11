@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Never screened is not the same as healthy: a BRFSS 2015 explorer</title>
+<meta name="description" content="An interactive t-SNE map of BRFSS 2015 respondents showing where never-screened people sit relative to those diagnosed with diabetes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:    #22303c;
+    --muted:  #5d6d79;
+    --faint:  #8fa3b0;
+    --rule:   #dfe4e8;
+    --panel:  #f3f5f6;
+    --dx:     #b5442e;
+    --nodx:   #2c5d8f;
+    --rest:   #b3bec6;
+    --flag:   #e2a52b;
+    --paper:  #ffffff;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font: 400 16px/1.55 "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  :focus-visible { outline: 2px solid var(--flag); outline-offset: 2px; }
+
+  .wrap { max-width: 1220px; margin: 0 auto; padding: 0 28px; }
+
+  /* intro */
+  header { padding: 44px 0 22px; }
+  h1 { font-size: 38px; line-height: 1.12; font-weight: 700; letter-spacing: -0.015em; margin: 0 0 14px; max-width: 20ch; }
+  .lede { font-size: 17.5px; line-height: 1.55; color: var(--ink); max-width: 68ch; margin: 0; }
+  .lede b { font-weight: 600; }
+
+  /* group picker */
+  .picker { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 12px 0 8px; }
+  .grp { display: grid; grid-template-columns: 150px 1fr; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+  .grp-label { font-size: 13px; color: var(--muted); }
+  .grp-btns { display: flex; flex-wrap: wrap; gap: 4px 4px; }
+  .tab {
+    font: inherit; font-size: 13.5px; line-height: 1.3; color: var(--ink); cursor: pointer;
+    background: transparent; border: 1px solid transparent; border-radius: 3px; padding: 4px 9px;
+  }
+  .tab:hover { border-color: var(--rule); background: var(--panel); }
+  .tab[aria-selected="true"] { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+  /* map + panel */
+  .stage { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 28px; padding: 18px 0 8px; align-items: start; }
+  .map-wrap { position: relative; }
+  canvas#map { display: block; width: 100%; cursor: crosshair; touch-action: manipulation; }
+  .map-bar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 20px; align-items: center;
+             font-size: 13px; color: var(--muted); padding-top: 8px; border-top: 1px solid var(--rule); margin-top: 6px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: center; color: var(--ink); }
+  .lg { display: inline-flex; align-items: center; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 7px; flex: none; }
+  .sw.tri { width: 12px; height: 11px; border-radius: 0; background: var(--ink);
+            clip-path: polygon(50% 0, 100% 100%, 0 100%); position: relative; }
+  .sw.tri::after { content: ""; position: absolute; inset: 1.6px 1.8px 1px; background: var(--flag);
+                   clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+  .sw.shape { background: #e5eaed; border-radius: 3px; width: 14px; }
+
+  .caption { padding: 0 0 4px; min-height: 52px; }
+  .cap-title { font-size: 21px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
+  .cap-sub { font-size: 13.5px; color: var(--muted); line-height: 1.4; margin-top: 2px; }
+  .toggle { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  .toggle input { accent-color: var(--ink); margin: 0; }
+
+  aside { font-size: 14px; line-height: 1.5; }
+  aside h2 { font-size: 19px; line-height: 1.25; font-weight: 700; margin: 0 0 8px; }
+  aside h3 { font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+  .block { padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--rule); }
+  .stat { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+  .stat span { color: var(--muted); }
+  .stat b { font-weight: 600; white-space: nowrap; }
+  .kbar { height: 5px; background: var(--rule); margin: 8px 0 4px; }
+  .kbar i { display: block; height: 100%; background: var(--ink); }
+  .note { color: var(--muted); font-size: 13px; }
+
+  .btn { font: inherit; font-size: 13.5px; cursor: pointer; border: 1px solid var(--ink); background: var(--paper);
+         color: var(--ink); border-radius: 3px; padding: 5px 11px; }
+  .btn:hover { background: var(--panel); }
+  .btn.primary { background: var(--ink); color: #fff; }
+  .btn.primary:hover { background: #33475a; }
+  .btn-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+
+  .who { margin: 0 0 8px; }
+  .who .risk { display: block; color: var(--muted); font-size: 13px; }
+  .nbr-dots { display: flex; gap: 5px; margin: 8px 0 4px; flex-wrap: wrap; }
+  .nbr-dots i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+  .nbr-dots i.dx { background: var(--dx); }
+  .nbr-dots i.nodx { background: var(--nodx); }
+  .nbr-dots i.uns { background: transparent; border: 1.5px solid var(--nodx); }
+  .nbr-dots i.flag { background: var(--flag); border-radius: 0; width: 12px; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+
+  table.cmp { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+  .cmp th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 0 0 4px; border-bottom: 1px solid var(--rule); }
+  .cmp th:not(:first-child), .cmp td:not(:first-child) { text-align: right; }
+  .cmp td { padding: 3px 0; border-bottom: 1px solid #eef1f3; }
+  .cmp td:first-child { padding-right: 8px; }
+  .cmp tr.differs td { background: #fbf4e6; }
+  .cmp tr.differs td:first-child { box-shadow: inset 3px 0 0 var(--flag); padding-left: 7px; }
+  .cmp tr.sep td { border-bottom: none; padding-top: 12px; color: var(--muted); font-size: 12px; background: none; }
+
+  /* notes */
+  .notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; padding: 30px 0 20px;
+           border-top: 1px solid var(--rule); margin-top: 22px; }
+  .notes h2 { font-size: 17px; margin: 0 0 8px; }
+  .notes p { font-size: 15px; line-height: 1.6; margin: 0 0 10px; max-width: 60ch; }
+  footer { font-size: 13px; color: var(--muted); padding: 12px 0 40px; border-top: 1px solid var(--rule); }
+
+  @media (max-width: 960px) {
+    .stage { grid-template-columns: 1fr; }
+    .notes { grid-template-columns: 1fr; gap: 8px; }
+  }
+  @media (max-width: 620px) {
+    .wrap { padding: 0 16px; }
+    h1 { font-size: 29px; }
+    .lede { font-size: 16px; }
+    .grp { grid-template-columns: 1fr; gap: 2px; margin-bottom: 6px; }
+    .cap-title { font-size: 18px; }
+    .grp-btns { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+    .grp-btns::-webkit-scrollbar { display: none; }
+    .tab { white-space: nowrap; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Never screened is not the same as healthy</h1>
+    <p class="lede" id="lede"></p>
+  </header>
+
+  <section aria-label="Map explorer">
+    <div class="picker" id="picker" role="tablist" aria-label="Brighten a group"></div>
+    <div class="stage">
+      <div class="map-wrap">
+        <div class="caption" id="caption" aria-live="polite"></div>
+        <canvas id="map" role="img" aria-label="t-SNE map of respondents. Use the group buttons to brighten a group, or Show a flagged respondent to inspect one."></canvas>
+        <div class="map-bar">
+          <div class="legend" id="legend"></div>
+          <label class="toggle"><input type="checkbox" id="showFlags" checked> Show flagged respondents</label>
+        </div>
+      </div>
+      <aside>
+        <div class="block" id="groupPanel"></div>
+        <div id="personPanel"></div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="notes" id="notes"></section>
+  <footer id="footer"></footer>
+</div>
+
+<script src="data/explorer-data.js"></script>
+<script src="explorer.js"></script>
+</body>
+</html>
