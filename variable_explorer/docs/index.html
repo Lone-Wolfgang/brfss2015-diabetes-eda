@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CDC Diabetes Health Indicators — variable explorer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--paper:#f5f6f4;--ink:#1c2430;--muted:#5b6672;--line:#d8dcd8;--none:#a3b4bf;--dia:#7d2a5c;--rate:#7d2a5c;--card:#fff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+header{padding:28px 24px 12px;max-width:1240px;margin:0 auto}
+h1{font:600 30px/1.15 Georgia,"Times New Roman",serif;margin:0 0 6px}
+h2{font:600 22px/1.2 Georgia,serif;margin:36px 0 12px}
+.sub{color:var(--muted);max-width:70ch;margin:0}
+.stats{display:flex;gap:28px;flex-wrap:wrap;margin:18px 0 0}
+.stat b{display:block;font:600 26px/1 Georgia,serif}
+.stat span{color:var(--muted);font-size:13px}
+.bar{position:sticky;top:0;z-index:5;background:var(--paper);border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:10px 24px}
+.bar .in{max-width:1240px;margin:0 auto;display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--ink);border-radius:6px;overflow:hidden}
+.seg button{border:0;background:transparent;padding:6px 12px;font:inherit;font-size:14px;cursor:pointer;color:var(--ink)}
+.seg button.on{background:var(--ink);color:#fff}
+.seg button:focus-visible{outline:2px solid var(--dia);outline-offset:-2px}
+label.f{font-size:14px;color:var(--muted)}
+select{font:inherit;font-size:14px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:#fff}
+.legend{font-size:13px;color:var(--muted);display:flex;gap:14px;margin-left:auto}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:2px;vertical-align:-1px;margin-right:5px}
+main{max-width:1240px;margin:0 auto;padding:18px 24px 60px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 14px 8px}
+.card h3{margin:0;font-size:15px;font-weight:600}
+.card .v{color:var(--muted);font-size:12px;font-family:ui-monospace,Menlo,Consolas,monospace}
+.card .r{float:right;font-size:12px;color:var(--muted)}
+.card.wide{grid-column:span 2}
+.card canvas{width:100%!important;height:200px!important;margin-top:6px}
+table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:14px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:#eceeeb;font-weight:600;cursor:pointer;white-space:nowrap}
+th:hover{text-decoration:underline}
+td.var{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;white-space:nowrap}
+.tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;white-space:nowrap}
+.t-Fine{background:#e4eee6;color:#25563a}
+.t-Near{background:#f7e3e3;color:#8a1f1f}.t-Rare{background:#f7e3e3;color:#8a1f1f}
+.t-Out{background:#fbecd9;color:#8a4a0e}.t-Zero{background:#fbecd9;color:#8a4a0e}.t-Skew{background:#fbecd9;color:#8a4a0e}
+.t-Imb{background:#fbecd9;color:#8a4a0e}.t-Weak{background:#e8e9ec;color:#4a5260}.t-Cod{background:#e8e9ec;color:#4a5260}
+ul.issues{max-width:80ch;padding-left:20px}
+ul.issues li{margin-bottom:6px}
+@media (max-width:800px){.card.wide{grid-column:span 1}.legend{margin-left:0}h1{font-size:24px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style></head><body>
+<header>
+ <h1>CDC Diabetes Health Indicators</h1>
+ <p class="sub">BRFSS 2015 survey responses, one row per respondent. The outcome <code>Diabetes_binary</code> is 1 if the person reported prediabetes or diabetes, 0 otherwise. Every variable is plotted below; switch the view to see how each one breaks down by outcome.</p>
+ <div class="stats" id="stats"></div>
+</header>
+<div class="bar"><div class="in">
+ <div class="seg" role="group" aria-label="View">
+  <button class="on" data-mode="overall">Overall</button>
+  <button data-mode="split">Split by outcome</button>
+  <button data-mode="rate">Diabetes rate by level</button>
+ </div>
+ <label class="f">Show <select id="grp"><option value="all">all variables</option></select></label>
+ <div class="legend" id="legend"></div>
+</div></div>
+<main>
+ <div class="grid" id="grid"></div>
+ <h2>What I noticed</h2>
+ <ul class="issues" id="issues"></ul>
+ <h2>Column by column</h2>
+ <table id="tbl"><thead><tr>
+  <th data-k="var">Variable</th><th data-k="label">Meaning</th><th data-k="distinct">Distinct</th><th data-k="top">Most common value</th><th data-k="r">r with outcome</th><th data-k="flag">Flag</th><th>Notes</th>
+ </tr></thead><tbody></tbody></table>
+</main>
+<script>
+const D = {"order": ["HighBP", "HighChol", "CholCheck", "BMI", "Smoker", "Stroke", "HeartDiseaseorAttack", "PhysActivity", "Fruits", "Veggies", "HvyAlcoholConsump", "AnyHealthcare", "NoDocbcCost", "GenHlth", "MentHlth", "PhysHlth", "DiffWalk", "Sex", "Age", "Education", "Income"], "vars": {"HighBP": {"label": "High blood pressure", "levels": ["No", "Yes"], "n0": [136109, 82225], "n1": [8742, 26604]}, "HighChol": {"label": "High cholesterol", "levels": ["No", "Yes"], "n0": [134429, 83905], "n1": [11660, 23686]}, "CholCheck": {"label": "Cholesterol check in last 5 yrs", "levels": ["No", "Yes"], "n0": [9229, 209105], "n1": [241, 35105]}, "Smoker": {"label": "Smoked \u2265100 cigarettes lifetime", "levels": ["No", "Yes"], "n0": [124228, 94106], "n1": [17029, 18317]}, "Stroke": {"label": "Ever had a stroke", "levels": ["No", "Yes"], "n0": [211310, 7024], "n1": [32078, 3268]}, "HeartDiseaseorAttack": {"label": "Coronary heart disease / MI", "levels": ["No", "Yes"], "n0": [202319, 16015], "n1": [27468, 7878]}, "PhysActivity": {"label": "Physical activity in last 30 days", "levels": ["No", "Yes"], "n0": [48701, 169633], "n1": [13059, 22287]}, "Fruits": {"label": "Eats fruit \u22651/day", "levels": ["No", "Yes"], "n0": [78129, 140205], "n1": [14653, 20693]}, "Veggies": {"label": "Eats vegetables \u22651/day", "levels": ["No", "Yes"], "n0": [39229, 179105], "n1": [8610, 26736]}, "HvyAlcoholConsump": {"label": "Heavy alcohol use", "levels": ["No", "Yes"], "n0": [204910, 13424], "n1": [34514, 832]}, "AnyHealthcare": {"label": "Has any health coverage", "levels": ["No", "Yes"], "n0": [10995, 207339], "n1": [1422, 33924]}, "NoDocbcCost": {"label": "Skipped doctor due to cost", "levels": ["No", "Yes"], "n0": [200722, 17612], "n1": [31604, 3742]}, "DiffWalk": {"label": "Serious difficulty walking", "levels": ["No", "Yes"], "n0": [188780, 29554], "n1": [22225, 13121]}, "Sex": {"label": "Sex", "levels": ["Female", "Male"], "n0": [123563, 94771], "n1": [18411, 16935]}, "GenHlth": {"label": "General health (self-rated)", "levels": ["Excellent", "Very good", "Good", "Fair", "Poor"], "n0": [44159, 82703, 62189, 21780, 7503], "n1": [1140, 6381, 13457, 9790, 4578]}, "Age": {"label": "Age group", "levels": ["18\u201324", "25\u201329", "30\u201334", "35\u201339", "40\u201344", "45\u201349", "50\u201354", "55\u201359", "60\u201364", "65\u201369", "70\u201374", "75\u201379", "80+"], "n0": [5622, 7458, 10809, 13197, 15106, 18077, 23226, 26569, 27511, 25636, 18392, 12577, 14154], "n1": [78, 140, 314, 626, 1051, 1742, 3088, 4263, 5733, 6558, 5141, 3403, 3209]}, "Education": {"label": "Education level", "levels": ["None/K only", "Grades 1\u20138", "Grades 9\u201311", "HS grad", "Some college", "College grad"], "n0": [127, 2860, 7182, 51684, 59556, 96925], "n1": [47, 1183, 2296, 11066, 10354, 10400]}, "Income": {"label": "Household income", "levels": ["<$10k", "$10\u201315k", "$15\u201320k", "$20\u201325k", "$25\u201335k", "$35\u201350k", "$50\u201375k", "$75k+"], "n0": [7428, 8697, 12426, 16081, 21379, 31179, 37954, 83190], "n1": [2383, 3086, 3568, 4054, 4504, 5291, 5265, 7195]}, "BMI": {"label": "Body mass index", "levels": ["<18.5", "18.5\u201325", "25\u201330", "30\u201335", "35\u201340", "40\u201350", "50+"], "n0": [2958, 65025, 83057, 43170, 14994, 7434, 1696], "n1": [169, 3928, 10692, 10281, 5669, 3756, 851]}, "MentHlth": {"label": "Days of poor mental health (30d)", "levels": ["0", "1\u20135", "6\u201315", "16\u201329", "30"], "n0": [152277, 36836, 15288, 4613, 9320], "n1": [23403, 4956, 3055, 1164, 2768]}, "PhysHlth": {"label": "Days of poor physical health (30d)", "levels": ["0", "1\u20135", "6\u201315", "16\u201329", "30"], "n0": [143312, 40229, 16225, 4894, 13674], "n1": [16740, 6582, 4435, 1863, 5726]}}, "groups": {"Health conditions": ["HighBP", "HighChol", "Stroke", "HeartDiseaseorAttack", "GenHlth", "MentHlth", "PhysHlth", "DiffWalk", "BMI"], "Behaviors": ["Smoker", "PhysActivity", "Fruits", "Veggies", "HvyAlcoholConsump"], "Healthcare access": ["CholCheck", "AnyHealthcare", "NoDocbcCost"], "Demographics": ["Sex", "Age", "Education", "Income"]}, "notes": {"HighBP": ["Fine", "Balanced (43% yes). 2nd strongest predictor. 75% of diabetics have it vs 38% of non-diabetics."], "HighChol": ["Fine", "Balanced (42% yes). 67% of diabetics vs 38% of non-diabetics."], "CholCheck": ["Near-constant", "96% yes. Almost no variance \u2014 carries little information on its own."], "BMI": ["Outliers / skew", "Right-skewed, integer-rounded. 99th pct = 50 but max = 98; 2,175 rows above 50. Diabetic median 31 vs 27. Consider capping or checking for entry errors."], "Smoker": ["Fine", "Balanced (44%). Note it is lifetime \u2265100 cigarettes, not current smoking. Weak predictor (r = .06)."], "Stroke": ["Rare event", "96% no. Only ~10k positives; strong when present but low overall information."], "HeartDiseaseorAttack": ["Rare event", "91% no. Combines CHD and MI into one flag."], "PhysActivity": ["Fine", "76% yes. Protective (r = \u2212.12). Question is any activity outside work in 30 days \u2014 very loose definition."], "Fruits": ["Weak signal", "63% yes. r = \u2212.04 with outcome \u2014 barely related."], "Veggies": ["Weak signal", "81% yes, imbalanced. r = \u2212.06."], "HvyAlcoholConsump": ["Rare event", "94% no. Negatively associated with diabetes (r = \u2212.06), likely confounded \u2014 heavy drinkers skew younger."], "AnyHealthcare": ["Near-constant", "95% yes. Essentially no relationship with outcome (r = .02)."], "NoDocbcCost": ["Imbalanced", "92% no. Weak (r = .03)."], "GenHlth": ["Fine", "Strongest single predictor (r = .29). Ordinal 1\u20135 \u2014 treat as ordered, not numeric. Rate rises 2.5% \u2192 38% across levels. Correlated ~.5 with PhysHlth and DiffWalk."], "MentHlth": ["Zero-inflated", "69% are exactly 0, then a spike at 30. Not usable as a normal numeric \u2014 bin it or use as categorical. Weak predictor (r = .07)."], "PhysHlth": ["Zero-inflated", "63% zeros, spike at 30. Same issue as MentHlth. Moderate predictor (r = .17); overlaps heavily with GenHlth."], "DiffWalk": ["Fine", "17% yes. Solid predictor (r = .22) but overlaps with GenHlth/PhysHlth/Age."], "Sex": ["Fine", "Balanced (44% male). Very weak (r = .03)."], "Age": ["Coded, non-linear", "13 five-year buckets, not years. Diabetes rate climbs to ~22% at 70\u201379 then dips at 80+ (survivor effect). Sample skews older than the US population."], "Education": ["Skewed", "42% college grads; levels 1\u20132 have < 5k rows combined. Correlated .45 with Income."], "Income": ["Skewed", "36% in the top bracket ($75k+). Nearly monotonic gradient: 24% diabetic in lowest bracket vs 8% in highest."]}, "q": {"HighBP": {"var": "HighBP", "label": "High blood pressure", "distinct": 2, "top": "57.1% = 0", "r": 0.263}, "HighChol": {"var": "HighChol", "label": "High cholesterol", "distinct": 2, "top": "57.6% = 0", "r": 0.2}, "CholCheck": {"var": "CholCheck", "label": "Cholesterol check in last 5 yrs", "distinct": 2, "top": "96.3% = 1", "r": 0.065}, "BMI": {"var": "BMI", "label": "Body mass index", "distinct": 84, "top": "9.7% = 27", "r": 0.217}, "Smoker": {"var": "Smoker", "label": "Smoked \u2265100 cigarettes lifetime", "distinct": 2, "top": "55.7% = 0", "r": 0.061}, "Stroke": {"var": "Stroke", "label": "Ever had a stroke", "distinct": 2, "top": "95.9% = 0", "r": 0.106}, "HeartDiseaseorAttack": {"var": "HeartDiseaseorAttack", "label": "Coronary heart disease / MI", "distinct": 2, "top": "90.6% = 0", "r": 0.177}, "PhysActivity": {"var": "PhysActivity", "label": "Physical activity in last 30 days", "distinct": 2, "top": "75.7% = 1", "r": -0.118}, "Fruits": {"var": "Fruits", "label": "Eats fruit \u22651/day", "distinct": 2, "top": "63.4% = 1", "r": -0.041}, "Veggies": {"var": "Veggies", "label": "Eats vegetables \u22651/day", "distinct": 2, "top": "81.1% = 1", "r": -0.057}, "HvyAlcoholConsump": {"var": "HvyAlcoholConsump", "label": "Heavy alcohol use", "distinct": 2, "top": "94.4% = 0", "r": -0.057}, "AnyHealthcare": {"var": "AnyHealthcare", "label": "Has any health coverage", "distinct": 2, "top": "95.1% = 1", "r": 0.016}, "NoDocbcCost": {"var": "NoDocbcCost", "label": "Skipped doctor due to cost", "distinct": 2, "top": "91.6% = 0", "r": 0.031}, "GenHlth": {"var": "GenHlth", "label": "General health (self-rated)", "distinct": 5, "top": "35.1% = 2", "r": 0.294}, "MentHlth": {"var": "MentHlth", "label": "Days of poor mental health (30d)", "distinct": 31, "top": "69.3% = 0", "r": 0.069}, "PhysHlth": {"var": "PhysHlth", "label": "Days of poor physical health (30d)", "distinct": 31, "top": "63.1% = 0", "r": 0.171}, "DiffWalk": {"var": "DiffWalk", "label": "Serious difficulty walking", "distinct": 2, "top": "83.2% = 0", "r": 0.218}, "Sex": {"var": "Sex", "label": "Sex", "distinct": 2, "top": "56.0% = 0", "r": 0.031}, "Age": {"var": "Age", "label": "Age group", "distinct": 13, "top": "13.1% = 9", "r": 0.177}, "Education": {"var": "Education", "label": "Education level", "distinct": 6, "top": "42.3% = 6", "r": -0.124}, "Income": {"var": "Income", "label": "Household income", "distinct": 8, "top": "35.6% = 8", "r": -0.164}}, "n": 253680, "n1": 35346, "dup": 24206};
+const pct = x => (x*100).toFixed(1)+'%';
+const n0tot = D.n - D.n1, base = D.n1/D.n;
+document.getElementById('stats').innerHTML = [
+ [D.n.toLocaleString(),'respondents'],['21','predictor variables'],[pct(base),'diabetic or prediabetic'],[D.dup.toLocaleString(),'duplicate rows'],['0','missing values']
+].map(([b,s])=>`<div class="stat"><b>${b}</b><span>${s}</span></div>`).join('');
+const sel=document.getElementById('grp');
+for(const g in D.groups){const o=document.createElement('option');o.value=g;o.textContent=g.toLowerCase();sel.appendChild(o)}
+let mode='overall', charts={};
+const baseline={id:'baseline',afterDatasetsDraw(c){if(c.$mode!=='rate')return;const y=c.scales.y.getPixelForValue(base*100),{left,right}=c.chartArea,x=c.ctx;x.save();x.setLineDash([4,4]);x.strokeStyle='#5b6672';x.beginPath();x.moveTo(left,y);x.lineTo(right,y);x.stroke();x.setLineDash([]);x.fillStyle='#5b6672';x.font='11px sans-serif';x.fillText('overall '+pct(base),left+4,y-4);x.restore()}};
+function datasets(v){
+ const V=D.vars[v];
+ if(mode==='overall') return [{data:V.n0.map((a,i)=>(a+V.n1[i])/D.n*100),backgroundColor:'#6b7d8a',borderRadius:3}];
+ if(mode==='split') return [
+  {label:'No diabetes',data:V.n0.map(a=>a/n0tot*100),backgroundColor:'#a3b4bf',borderRadius:3},
+  {label:'Diabetes',data:V.n1.map(a=>a/D.n1*100),backgroundColor:'#7d2a5c',borderRadius:3}];
+ return [{data:V.n0.map((a,i)=>V.n1[i]/(a+V.n1[i])*100),backgroundColor:'#7d2a5c',borderRadius:3}];
+}
+const ylab={overall:'% of respondents',split:'% within group',rate:'% diabetic'};
+function build(){
+ const grid=document.getElementById('grid');grid.innerHTML='';charts={};
+ const g=sel.value, vars=g==='all'?D.order:D.groups[g];
+ for(const v of vars){const V=D.vars[v],q=D.q[v];
+  const c=document.createElement('div');c.className='card'+(V.levels.length>6?' wide':'');
+  c.innerHTML=`<span class="r">r = ${q.r.toFixed(2)}</span><h3>${V.label}</h3><div class="v">${v}</div><canvas></canvas>`;
+  grid.appendChild(c);
+  const ch=new Chart(c.querySelector('canvas'),{type:'bar',data:{labels:V.levels,datasets:datasets(v)},plugins:[baseline],
+   options:{responsive:true,maintainAspectRatio:false,animation:{duration:250},
+    plugins:{legend:{display:false},tooltip:{callbacks:{label:t=>(t.dataset.label?t.dataset.label+': ':'')+t.parsed.y.toFixed(1)+'%'}}},
+    scales:{x:{grid:{display:false},ticks:{font:{size:11},autoSkip:false,maxRotation:V.levels.length>8?45:0}},y:{beginAtZero:true,max:mode==='rate'?undefined:undefined,title:{display:true,text:ylab[mode],font:{size:11}},ticks:{font:{size:11},callback:x=>x+'%'}}}}});
+  ch.$mode=mode;charts[v]=ch;}
+ setLegend();
+}
+function refresh(){for(const v in charts){const ch=charts[v];ch.data.datasets=datasets(v);ch.options.scales.y.title.text=ylab[mode];ch.$mode=mode;ch.update()}setLegend()}
+function setLegend(){document.getElementById('legend').innerHTML=mode==='split'?'<span><i style="background:#a3b4bf"></i>No diabetes</span><span><i style="background:#7d2a5c"></i>Diabetes / prediabetes</span>':mode==='rate'?'<span><i style="background:#7d2a5c"></i>Share diabetic within each level</span>':'<span><i style="background:#6b7d8a"></i>Share of all respondents</span>'}
+document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.seg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');mode=b.dataset.mode;refresh()});
+sel.onchange=build;
+// issues list
+document.getElementById('issues').innerHTML=[
+ `<b>${D.dup.toLocaleString()} duplicate rows</b> (${pct(D.dup/D.n)}) once the ID column is dropped. With only coarse integer codes this may be legitimate, but it needs a decision before modelling.`,
+ `<b>Class imbalance:</b> only ${pct(base)} of rows are positive. Accuracy will look great for a model that predicts "no" for everyone; use AUC / recall / balanced accuracy.`,
+ `<b>Near-constant columns:</b> CholCheck (96% yes), AnyHealthcare (95% yes), Stroke (96% no), HvyAlcoholConsump (94% no), NoDocbcCost (92% no), HeartDiseaseorAttack (91% no). Little variance to learn from individually.`,
+ `<b>Zero-inflated counts:</b> MentHlth and PhysHlth are 0 for 69% / 63% of people with a second spike at 30. Means and SDs are misleading here.`,
+ `<b>BMI outliers:</b> 99th percentile is 50 but the max is 98, with 2,175 rows above 50.`,
+ `<b>Everything is integer-coded.</b> Age, Education, Income and GenHlth are ordinal buckets, not measurements — Age 9 means 60–64, not 9 years old.`,
+ `<b>Redundancy:</b> GenHlth, PhysHlth and DiffWalk correlate ~0.5 with each other; Education and Income correlate 0.45.`,
+ `<b>Weak or counter-intuitive predictors:</b> Fruits, Veggies, Sex, AnyHealthcare have |r| &lt; 0.06. Heavy drinking is <i>negatively</i> associated with diabetes, probably confounding by age.`,
+ `<b>No missing values</b>, but that reflects the cleaned Kaggle/UCI version; the raw BRFSS has "don't know / refused" codes that were removed.`
+].map(s=>`<li>${s}</li>`).join('');
+// table
+const rows=D.order.map(v=>({var:v,label:D.vars[v].label,distinct:D.q[v].distinct,top:D.q[v].top,r:D.q[v].r,flag:D.notes[v][0],note:D.notes[v][1]}));
+let sortK='var',asc=true;
+function renderTbl(){const tb=document.querySelector('#tbl tbody');const rs=[...rows].sort((a,b)=>{let x=a[sortK],y=b[sortK];if(sortK==='r'){x=Math.abs(x);y=Math.abs(y)}return (x>y?1:x<y?-1:0)*(asc?1:-1)});
+ tb.innerHTML=rs.map(r=>`<tr><td class="var">${r.var}</td><td>${r.label}</td><td>${r.distinct}</td><td>${r.top}</td><td>${r.r>0?'+':''}${r.r.toFixed(2)}</td><td><span class="tag t-${r.flag.slice(0,4).replace(/[^A-Za-z]/g,'')}">${r.flag}</span></td><td>${r.note}</td></tr>`).join('')}
+document.querySelectorAll('#tbl th[data-k]').forEach(th=>th.onclick=()=>{const k=th.dataset.k;asc=sortK===k?!asc:(k==='r'?false:true);sortK=k;renderTbl()});
+renderTbl();build();
+</script></body></html>
