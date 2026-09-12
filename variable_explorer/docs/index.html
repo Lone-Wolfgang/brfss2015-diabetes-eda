@@ -10,6 +10,7 @@ header{padding:28px 24px 12px;max-width:1240px;margin:0 auto}
 h1{font:600 30px/1.15 Georgia,"Times New Roman",serif;margin:0 0 6px}
 h2{font:600 22px/1.2 Georgia,serif;margin:36px 0 12px}
 .sub{color:var(--muted);max-width:70ch;margin:0}
+.sub.note{margin-top:10px;font-size:13.5px;border-left:3px solid var(--dia);padding-left:10px}
 .stats{display:flex;gap:28px;flex-wrap:wrap;margin:18px 0 0}
 .stat b{display:block;font:600 26px/1 Georgia,serif}
 .stat span{color:var(--muted);font-size:13px}
@@ -48,7 +49,8 @@ ul.issues li{margin-bottom:6px}
 </style></head><body>
 <header>
  <h1>CDC Diabetes Health Indicators</h1>
- <p class="sub">BRFSS 2015 survey responses, one row per respondent. The outcome <code>Diabetes_binary</code> is 1 if the person reported prediabetes or diabetes, 0 otherwise. Every variable is plotted below; switch the view to see how each one breaks down by outcome.</p>
+ <p class="sub">BRFSS 2015 survey responses, one row per respondent — the same 253,680 rows and 21 predictors the rest of this site uses. Every variable is plotted below; switch the view to see how each one breaks down by outcome.</p>
+ <p class="sub note">This page collapses the shared <code>Diabetes_012</code> target to a binary one: <b>1 = diagnosed diabetes</b> (class 2, 35,346 rows), <b>0 = everyone else</b>. Note that the 4,631 prediabetic respondents (class 1, 1.8%) fall on the <b>0</b> side here, so the positive rate is 13.9% rather than the 15.8% you would get by grouping prediabetes with diabetes. The other tabs keep all three classes separate — read rates here as <i>diagnosed diabetes only</i>.</p>
  <div class="stats" id="stats"></div>
 </header>
 <div class="bar"><div class="in">
@@ -74,7 +76,7 @@ const D = {"order": ["HighBP", "HighChol", "CholCheck", "BMI", "Smoker", "Stroke
 const pct = x => (x*100).toFixed(1)+'%';
 const n0tot = D.n - D.n1, base = D.n1/D.n;
 document.getElementById('stats').innerHTML = [
- [D.n.toLocaleString(),'respondents'],['21','predictor variables'],[pct(base),'diabetic or prediabetic'],[D.dup.toLocaleString(),'duplicate rows'],['0','missing values']
+ [D.n.toLocaleString(),'respondents'],['21','predictor variables'],[pct(base),'diagnosed diabetes'],[D.dup.toLocaleString(),'duplicate rows'],['0','missing values']
 ].map(([b,s])=>`<div class="stat"><b>${b}</b><span>${s}</span></div>`).join('');
 const sel=document.getElementById('grp');
 for(const g in D.groups){const o=document.createElement('option');o.value=g;o.textContent=g.toLowerCase();sel.appendChild(o)}
@@ -104,7 +106,7 @@ function build(){
  setLegend();
 }
 function refresh(){for(const v in charts){const ch=charts[v];ch.data.datasets=datasets(v);ch.options.scales.y.title.text=ylab[mode];ch.$mode=mode;ch.update()}setLegend()}
-function setLegend(){document.getElementById('legend').innerHTML=mode==='split'?'<span><i style="background:#a3b4bf"></i>No diabetes</span><span><i style="background:#7d2a5c"></i>Diabetes / prediabetes</span>':mode==='rate'?'<span><i style="background:#7d2a5c"></i>Share diabetic within each level</span>':'<span><i style="background:#6b7d8a"></i>Share of all respondents</span>'}
+function setLegend(){document.getElementById('legend').innerHTML=mode==='split'?'<span><i style="background:#a3b4bf"></i>No diabetes</span><span><i style="background:#7d2a5c"></i>Diagnosed diabetes</span>':mode==='rate'?'<span><i style="background:#7d2a5c"></i>Share with diagnosed diabetes</span>':'<span><i style="background:#6b7d8a"></i>Share of all respondents</span>'}
 document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.seg button').forEach(x=>x.classList.remove('on'));b.classList.add('on');mode=b.dataset.mode;refresh()});
 sel.onchange=build;
 // issues list
@@ -117,7 +119,8 @@ document.getElementById('issues').innerHTML=[
  `<b>Everything is integer-coded.</b> Age, Education, Income and GenHlth are ordinal buckets, not measurements — Age 9 means 60–64, not 9 years old.`,
  `<b>Redundancy:</b> GenHlth, PhysHlth and DiffWalk correlate ~0.5 with each other; Education and Income correlate 0.45.`,
  `<b>Weak or counter-intuitive predictors:</b> Fruits, Veggies, Sex, AnyHealthcare have |r| &lt; 0.06. Heavy drinking is <i>negatively</i> associated with diabetes, probably confounding by age.`,
- `<b>No missing values</b>, but that reflects the cleaned Kaggle/UCI version; the raw BRFSS has "don't know / refused" codes that were removed.`
+ `<b>No missing values</b>, but that reflects the cleaned Kaggle/UCI version; the raw BRFSS has "don't know / refused" codes that were removed.`,
+ `<b>Prediabetics sit in the negative class here.</b> Collapsing <code>Diabetes_012</code> to a binary target puts all 4,631 prediabetic respondents (1.8%) on the 0 side, so this page's 13.9% positive rate measures <i>diagnosed diabetes only</i>. Grouping them with the diabetics instead gives 15.8%. Any rate on this page is therefore a slight under-count of "diabetic or prediabetic", and the negative class is mildly contaminated with people who are already glucose-impaired.`
 ].map(s=>`<li>${s}</li>`).join('');
 // table
 const rows=D.order.map(v=>({var:v,label:D.vars[v].label,distinct:D.q[v].distinct,top:D.q[v].top,r:D.q[v].r,flag:D.notes[v][0],note:D.notes[v][1]}));
