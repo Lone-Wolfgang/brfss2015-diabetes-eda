@@ -16,7 +16,7 @@ income     B19001 "Household Income" -> 8 BRFSS INCOME2 bands. The 2015-vintage
            ACS brackets break at $10/15/20/25/35/50/75k, so every BRFSS
            cutpoint lands on an ACS boundary and the crosswalk is lossless.
 education  B15003 "Educational Attainment", population 25+ -> 6 BRFSS bands.
-           _016E ("12th grade, no diploma") counts as "some HS"; associate's
+           _016E ("12th grade, no diploma") counts as "some HS"; associate'sthAg
            (_021E) goes with "some college".
 
 Usage

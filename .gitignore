@@ -28,3 +28,5 @@ artifacts/
 
 # Pages build output
 _site/
+
+*.md
