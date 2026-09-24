@@ -13,7 +13,13 @@ Two steps:
                  Indicators" file: keep 22 variables, drop rows with any blank,
                  recode each one to 0/1 (or a cleaned ordinal), drop rows with
                  "don't know / refused" codes, round BMI, rename. Row order is preserved,
-                 so the output lines up 1:1 with the derived CSV.
+                 so the output lines up 1:1 with the derived CSV. Then five raw variables
+                 the CSV left out are appended (see ADDED): AgeYears, WeightKg, HeightCm,
+                 State, Race.
+
+Output columns: _STATE, SEQNO (respondent ID), the 22 derived-CSV columns, the 5
+added features, then any --extra raw variables. Ideas for further variables are at
+the bottom of this file.
 
 The derived CSV is built from the **2015** BRFSS (441,456 respondents ->
 253,680 rows). The 2014 file does not work: blood pressure, cholesterol and
@@ -99,6 +105,31 @@ DERIVED_ORDER = [
     "GENHLTH", "MENTHLTH", "PHYSHLTH", "DIFFWALK", "SEX", "_AGEG5YR", "EDUCA", "INCOME2",
 ]
 
+# --- added features ------------------------------------------------------------------
+# Raw variables the derived CSV left out, appended after its 22 columns. They never
+# drop rows: an unusable value becomes NaN, so the row set still matches the CSV.
+# raw variable -> (new name, divisor for implied decimals, codes that become NaN)
+ADDED = {
+    "_AGE80": ("AgeYears", 1,   set()),     # exact age 18-80; everyone 80+ is coded 80
+    "WTKG3":  ("WeightKg", 100, {99999}),   # 2 implied decimals; 99999 = DK/refused
+    "HTM4":   ("HeightCm", 1,   set()),
+    "_STATE": ("State",    1,   set()),     # FIPS code -> postal abbreviation, see STATE_ABBR
+    "_RACE":  ("Race",     1,   set()),     # codes in RACE_LABELS; blank -> 9 (unknown)
+}
+STATE_ABBR = dict(zip(
+    [1, 2, 4, 5, 6, 8, 9, 10, 11, 12, 13, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+     27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 44, 45, 46, 47, 48,
+     49, 50, 51, 53, 54, 55, 56, 66, 72],
+    "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE "
+    "NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY GU PR".split(),
+))
+RACE_LABELS = {
+    1: "White, non-Hispanic", 2: "Black, non-Hispanic",
+    3: "American Indian / Alaska Native, non-Hispanic", 4: "Asian, non-Hispanic",
+    5: "Native Hawaiian / Pacific Islander, non-Hispanic", 6: "Other race, non-Hispanic",
+    7: "Multiracial, non-Hispanic", 8: "Hispanic", 9: "Don't know / refused",
+}
+
 
 # --- step 1: raw file -> DataFrame -------------------------------------------------
 def read_layout(path):
@@ -151,12 +182,13 @@ def read_raw(asc_path=DEFAULT_ASC, layout_path=DEFAULT_LAYOUT, columns=None):
 
 
 # --- step 2: raw DataFrame -> derived ----------------------------------------------
-def preprocess(raw, extra=(), keep_ids=True):
+def preprocess(raw, extra=(), keep_ids=True, added=True):
     """Apply the derived-dataset recipe to a raw BRFSS DataFrame.
 
     extra:    raw variables to carry along untouched (the "left out" data). They are
               not used for filtering, so the row set matches the derived CSV exactly.
     keep_ids: keep _STATE and SEQNO as leading columns.
+    added:    append the decoded ADDED features (AgeYears, WeightKg, HeightCm, State, Race).
     Returns a DataFrame indexed by the raw row number.
     """
     missing = [c for c in DERIVED_ORDER if c not in raw.columns]
@@ -182,8 +214,25 @@ def preprocess(raw, extra=(), keep_ids=True):
     df = df.rename(columns={v: RECIPE[v][0] for v in DERIVED_ORDER}).astype(float)
 
     front = raw.loc[df.index, ID_COLS] if keep_ids else None
+    new = add_features(raw.loc[df.index]) if added else None
     tail = raw.loc[df.index, list(extra)] if extra else None
-    return pd.concat([x for x in (front, df, tail) if x is not None], axis=1)
+    return pd.concat([x for x in (front, df, new, tail) if x is not None], axis=1)
+
+
+def add_features(raw):
+    """Decode the ADDED raw variables for the given raw rows (no rows are dropped)."""
+    missing = [c for c in ADDED if c not in raw.columns]
+    if missing:
+        raise KeyError(f"raw data lacks added-feature variables {missing}; read them with read_raw()")
+    out = pd.DataFrame(index=raw.index)
+    for var, (name, div, na_codes) in ADDED.items():
+        s = raw[var]
+        if na_codes:
+            s = s.where(~s.isin(na_codes))
+        out[name] = s / div
+    out["State"] = out["State"].map(STATE_ABBR)
+    out["Race"] = out["Race"].fillna(9)
+    return out
 
 
 # --- verification ------------------------------------------------------------------
@@ -226,7 +275,7 @@ def main():
 
     extra = [c for c in args.extra.split(",") if c]
     # reading all ~330 variables is slow; only read everything if asked to save it
-    cols = None if args.raw_out else ID_COLS + DERIVED_ORDER + extra
+    cols = None if args.raw_out else list(dict.fromkeys(ID_COLS + DERIVED_ORDER + list(ADDED) + extra))
     raw = read_raw(args.asc, args.layout, columns=cols)
     print(f"raw: {raw.shape[0]:,} respondents x {raw.shape[1]} variables")
     if args.raw_out:
@@ -250,3 +299,59 @@ def _write(df, path):
 
 if __name__ == "__main__":
     main()
+
+
+# --- candidates for future features ---------------------------------------------------
+# From profiling ~80 raw 2015 variables on the 253,680 derived respondents (coverage
+# after removing DK/refused codes; association with Diabetes_012 == 2). Model results
+# are 5-fold CV AUC with the 21 derived features included (logistic / boosted trees).
+#
+# What the tests so far showed
+#   Finer versions of existing features add ~nothing to prediction:
+#     exact BMI vs rounded BMI            0.8220 vs 0.8220 / 0.8300 vs 0.8299
+#     WeightKg + HeightCm vs BMI          0.8217 vs 0.8220 (use one or the other, not both)
+#     AgeYears vs Age buckets             0.8223 vs 0.8220 (one-hot buckets: 0.8237)
+#     State (one-hot)                     +0.0004 / -0.0014
+#   New information helps:
+#     Race                                +0.0023 / +0.0021 (0.8260 / 0.8320). Adjusted odds
+#       ratio vs White NH: Asian 1.71, AI/AN 1.72, Black 1.54, Hispanic 1.54. Race explains
+#       most of the leftover state effect (CA 1.15 -> 1.03, PR 1.15 -> 0.82).
+#   So the next variables worth testing are ones that bring new information.
+#
+# Continuous / count, ~100% coverage
+#   _DRNKWEK  drinks per week (/100; 99900 = DK). rho -0.17, AUC 0.63. Refines HvyAlcoholConsump.
+#   _FRUTSUM  fruit servings/day (/100). Weak (rho -0.06). Refines Fruits.
+#   _VEGESUM  vegetable servings/day (/100). Weak (rho -0.07). Refines Veggies.
+#   PA1MIN_   total activity minutes/week. Blank for every inactive respondent -> fill 0
+#             when PhysActivity == 0 (then ~99% coverage). PA1VIGM_ = vigorous minutes, same rule.
+#   STRFREQ_  strength-training sessions/week (/1000; 99000 = DK). rho -0.11.
+#   POORHLTH  days poor health limited activity (88 -> 0; 77/99 -> NaN). Blank exactly when
+#             PhysHlth == MentHlth == 0 -> fill 0. rho 0.13.
+#   CHILDREN  number of children in household (88 -> 0; 99 -> NaN). Mostly an age proxy.
+#   _BMI5     unrounded BMI (/100) - for plots/descriptives, not needed for modelling.
+#
+# Categorical / binary with large diabetes-rate spread (1 yes / 2 no; 7/9 -> NaN)
+#   Comorbidities: CHCKIDNY (kidney disease: 37% diabetic vs 13%), CVDINFR4 (heart attack),
+#     CVDCRHD4 (coronary disease), CHCCOPD1 (COPD), HAVARTH3 (arthritis), ADDEPEV2 (depression),
+#     ASTHMA3, CHCOCNCR (non-skin cancer).
+#   Disability (each ~2x the diabetes rate): BLIND, DECIDE, DIFFDRES, DIFFALON, USEEQUIP, QLACTLM2.
+#   Socio-demographic: EMPLOY1 (7 = retired is a real level, not missing; 8 = unable to work
+#     -> 32% diabetic), MARITAL, VETERAN3, INTERNET, RENTHOM1.
+#   Behaviour / care: _SMOKER3 (4-level smoking), DRNKANY5, _RFBING5 (binge drinking),
+#     _PA150R2 (meets activity guideline), CHECKUP1 (8 = never), PERSDOC2, PNEUVAC3, FLUSHOT6.
+#
+# Survey design - keep for population estimates, not as model features
+#   _LLCPWT (final weight), _STSTR (stratum), _PSU (cluster). Needed for weighted,
+#   US-representative rates and odds ratios; everything above is unweighted.
+#
+# Do NOT add
+#   Target leakage - asked only of diabetics or define prediabetes: DIABAGE2, INSULIN,
+#     BLDSUGAR, CHKHEMO3, FEETCHK2, FEETCHK, DOCTDIAB, EYEEXAM, DIABEYE, DIABEDU, PDIABTST, PREDIAB1.
+#   Computed from age + sex (|rho| with Age 0.98-0.99): MAXVO2_, FC60_.
+#   Duplicates: WEIGHT2 (= WTKG3 in lbs), HTIN4 (= HTM4), DROCDY3_ (~ _DRNKWEK), the fruit/veg
+#     components FTJUDA1_, FRUTDA1_, BEANDAY_, GRENDAY_, ORNGDAY_, VEGEDA1_ (summed in _FRUTSUM /
+#     _VEGESUM), PAMIN11_, _MINAC11, PADUR1_, PAFREQ1_ (first-activity pieces of PA1MIN_).
+#   Low coverage (skip patterns / optional modules): AVEDRNK2, MAXDRNKS, DRNK3GE5 (~54%, drinkers
+#     only), LASTSMK2 (31%), JOINPAIN (34%), BPMEDS (43%, only if HighBP), NUMADULT / HHADULT
+#     (landline vs cell split), QLMENTL2 / PAINACT2 / QLSTRES2 (0%), LONGWTCH, ASTHMAGE.
+#   Not in the 2015 core survey at all: SLEPTIM1 (sleep hours; in the 2014 file, not 2015).
