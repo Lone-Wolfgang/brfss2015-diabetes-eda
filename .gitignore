@@ -31,3 +31,5 @@ artifacts/
 _site/
 
 *.md.claude/worktrees/
+
+.claude/
