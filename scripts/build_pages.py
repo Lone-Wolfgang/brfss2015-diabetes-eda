@@ -226,6 +226,22 @@ INDEX_TEMPLATE = """<!doctype html>
     const iframe = document.createElement("iframe");
     iframe.src = section.type === "static" ? `${{section.dir}}/index.html` : `${{section.dir}}/${{member.stem}}.html`;
     main.appendChild(iframe);
+
+    // Links inside a notebook that point back to this site switch tabs here
+    // instead of loading the whole site inside the iframe.
+    iframe.addEventListener("load", () => {{
+      iframe.contentDocument.addEventListener("click", e => {{
+        const a = e.target.closest("a[href]");
+        if (!a) return;
+        const url = new URL(a.href);
+        const samePage = url.origin === location.origin &&
+          url.pathname.replace(/index\\.html$/, "") === location.pathname.replace(/index\\.html$/, "");
+        if (samePage && url.hash) {{
+          e.preventDefault();
+          location.hash = url.hash;
+        }}
+      }});
+    }});
   }}
 
   function fromHash() {{
