@@ -33,3 +33,6 @@ _site/
 *.md.claude/worktrees/
 
 .claude/
+
+.*.md
+Lab2_plan.md
