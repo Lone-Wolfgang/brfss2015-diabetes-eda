@@ -21,7 +21,7 @@ def split_words(stem: str) -> str:
 
 def discover_labs() -> list[dict]:
     labs = []
-    for lab_dir in sorted(ROOT.glob("Lab*")):
+    for lab_dir in sorted(ROOT.glob("*Lab*")):
         if not lab_dir.is_dir():
             continue
         match = re.fullmatch(r"Lab(\d+)", lab_dir.name)
