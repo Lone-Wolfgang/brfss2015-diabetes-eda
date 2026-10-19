@@ -24,7 +24,7 @@ def discover_labs() -> list[dict]:
     for lab_dir in sorted(ROOT.glob("*Lab*")):
         if not lab_dir.is_dir():
             continue
-        match = re.fullmatch(r"(Mini)?Lab(\d+)", lab_dir.name)
+        match = re.fullmatch(r"(?:Mini)?Lab(\d*)", lab_dir.name)     # Lab1, Lab2, ..., MiniLab
         if not match:
             continue
         notebooks = sorted(lab_dir.glob("*.ipynb"), key=lambda p: p.stem)
@@ -35,13 +35,13 @@ def discover_labs() -> list[dict]:
             {
                 "type": "lab",
                 "dir": lab_dir.name,
-                "num": int(match.group(1)),
+                "num": int(match.group(1)) if match.group(1) else None,
                 "label": split_words(lab_dir.name),
                 "members": members,
                 "notebooks": notebooks,
             }
         )
-    labs.sort(key=lambda lab: lab["num"])
+    labs.sort(key=lambda lab: (lab["num"] is None, lab["num"] or 0, lab["dir"]))   # numbered labs first
     return labs
 
 
