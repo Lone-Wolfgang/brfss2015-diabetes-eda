@@ -2,7 +2,9 @@
 """Discover Lab*/*.ipynb, render each to HTML, and emit a tabbed index.html."""
 
 import json
+import os
 import re
+import time
 import shutil
 import subprocess
 import sys
@@ -189,6 +191,7 @@ INDEX_TEMPLATE = """<!doctype html>
 <main id="main"></main>
 <script>
   const LABS = {labs_json};
+  const BUILD = "{build}";   // changes every deploy, so browsers fetch new notebook pages instead of cached ones
 
   const labTabs = document.getElementById("lab-tabs");
   const memberTabs = document.getElementById("member-tabs");
@@ -224,7 +227,8 @@ INDEX_TEMPLATE = """<!doctype html>
 
     main.innerHTML = "";
     const iframe = document.createElement("iframe");
-    iframe.src = section.type === "static" ? `${{section.dir}}/index.html` : `${{section.dir}}/${{member.stem}}.html`;
+    iframe.src = (section.type === "static" ? `${{section.dir}}/index.html` : `${{section.dir}}/${{member.stem}}.html`)
+      + `?v=${{BUILD}}`;
     main.appendChild(iframe);
 
     // Links inside a notebook that point back to this site switch tabs here
@@ -274,7 +278,8 @@ def write_index(sections: list[dict]) -> None:
             for section in sections
         ]
     )
-    (SITE / "index.html").write_text(INDEX_TEMPLATE.format(labs_json=sections_json))
+    build = os.environ.get("GITHUB_SHA", "")[:12] or str(int(time.time()))
+    (SITE / "index.html").write_text(INDEX_TEMPLATE.format(labs_json=sections_json, build=build))
 
 
 def main() -> None:
