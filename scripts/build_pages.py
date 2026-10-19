@@ -35,13 +35,13 @@ def discover_labs() -> list[dict]:
             {
                 "type": "lab",
                 "dir": lab_dir.name,
-                "num": int(match.group(1)) if match.group(1) else None,
+                "num": int(match.group(1)) if match.group(1) else 1.5,     # the Mini Lab came between Lab 1 and Lab 2
                 "label": split_words(lab_dir.name),
                 "members": members,
                 "notebooks": notebooks,
             }
         )
-    labs.sort(key=lambda lab: (lab["num"] is None, lab["num"] or 0, lab["dir"]))   # numbered labs first
+    labs.sort(key=lambda lab: lab["num"])
     return labs
 
 
