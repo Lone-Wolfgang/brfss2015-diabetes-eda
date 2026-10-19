@@ -24,7 +24,7 @@ def discover_labs() -> list[dict]:
     for lab_dir in sorted(ROOT.glob("*Lab*")):
         if not lab_dir.is_dir():
             continue
-        match = re.fullmatch(r"Lab(\d+)", lab_dir.name)
+        match = re.fullmatch(r"(Mini)?Lab(\d+)", lab_dir.name)
         if not match:
             continue
         notebooks = sorted(lab_dir.glob("*.ipynb"), key=lambda p: p.stem)

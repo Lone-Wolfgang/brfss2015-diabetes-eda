@@ -14,4 +14,7 @@ dependencies = [
     "scikit-learn>=1.9.0",
     "xgboost==3.4.1",
     "joblib>=1.4",
+    "pyarrow>=26.0.0",
+    "optuna>=5.0.0",
+    "huggingface-hub>=2.2.0",
 ]
